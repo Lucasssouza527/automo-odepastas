@@ -7,8 +7,6 @@ from datetime import datetime
 # --- CONFIGURAÇÕES ---
 caminho_base = os.path.expanduser("~")
 pasta_monitorada = os.path.join(caminho_base, "Downloads")
-
-# Salva o log DENTRO da pasta de downloads para facilitar
 arquivo_log = os.path.join(pasta_monitorada, "registro_seguranca.log")
 
 pastas_destino = {
@@ -57,16 +55,27 @@ while True:
             arquivos = os.listdir(pasta_monitorada)
 
             for arquivo in arquivos:
-                # Ignora temporários, logs e o próprio script
-                if arquivo.endswith((".tmp", ".crdownload", ".part", ".ini", ".py", ".log", ".download")):
+                # Ignora arquivos temporários e ocultos
+                if arquivo.startswith(".") or arquivo.endswith((".tmp", ".crdownload", ".part", ".ini", ".py", ".log", ".download")):
                     continue
                 
                 origem = os.path.join(pasta_monitorada, arquivo)
                 
                 if os.path.isfile(origem):
-                    # --- AQUI ESTÁ A LINHA DE CORREÇÃO DE MAIÚSCULAS ---
-                    extensao = os.path.splitext(arquivo)[1].lower() 
                     
+                    try:
+                        tempo_agora = time.time()
+                        ultimo_acesso = os.path.getmtime(origem)
+                        
+                        # Se o arquivo foi modificado nos últimos 10 segundos, PULA ELE.
+                        # Isso garante que o download terminou de verdade.
+                        if (tempo_agora - ultimo_acesso) < 10:
+                            continue 
+                    except FileNotFoundError:
+                        continue # Arquivo sumiu ou foi movido antes da verificação
+                    # ===============================================
+
+                    extensao = os.path.splitext(arquivo)[1].lower()
                     destino_encontrado = None
 
                     for pasta, extensoes in pastas_destino.items():
@@ -75,24 +84,22 @@ while True:
                             break
                     
                     if not destino_encontrado:
-                        destino_encontrado = "Outros"
+                        #  mover tudo que não conhece para Outros
+                        # destino_encontrado = "Outros"
+                        continue # Se não conhece a extensão, ignora por segurança
 
                     caminho_destino = os.path.join(pasta_monitorada, destino_encontrado)
                     if not os.path.exists(caminho_destino):
                         os.makedirs(caminho_destino)
 
-                    # Tenta mover, mas se o arquivo estiver em uso, ele espera
                     try:
                         nome_final = mover_com_seguranca(origem, caminho_destino)
                         registrar_log(f"MOVIDO: '{arquivo}' -> '{destino_encontrado}/{nome_final}'")
                         print(f"[OK] {arquivo} movido para {destino_encontrado}")
-                    except PermissionError:
-                        # Erro comum quando o download ainda não terminou ou arquivo está aberto
-                        print(f"[EM USO] O arquivo '{arquivo}' está sendo usado. Tentarei na próxima volta.")
-                    except OSError as e:
-                        print(f"[ERRO] Não foi possível mover '{arquivo}': {e}")
+                    except Exception as e:
+                        print(f"[ERRO] Falha ao mover '{arquivo}': {e}")
 
-        time.sleep(2) # Verifica a cada 2 segundos
+        time.sleep(2) 
 
     except KeyboardInterrupt:
         print("\nMonitoramento encerrado pelo usuário.")
